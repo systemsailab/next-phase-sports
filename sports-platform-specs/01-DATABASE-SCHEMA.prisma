@@ -1,0 +1,1382 @@
+// =============================================================
+// PRISMA SCHEMA — Autonomous Sports Facility Platform
+// =============================================================
+// Database: PostgreSQL (Railway)
+// ORM: Prisma
+// Multi-tenant: facilityId on every table
+// =============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// =============================================================
+// CORE: FACILITY & ORGANIZATION
+// =============================================================
+
+model Facility {
+  id                String   @id @default(cuid())
+  name              String
+  slug              String   @unique // URL-friendly name: "austin-sports-complex"
+  description       String?
+  logo              String?  // S3 URL
+  coverImage        String?  // S3 URL
+  
+  // Contact & Location
+  email             String
+  phone             String
+  website           String?
+  address           String
+  city              String
+  state             String
+  zip               String
+  country           String   @default("US")
+  latitude          Float?
+  longitude         Float?
+  timezone          String   @default("America/Chicago")
+  
+  // Operating Config
+  operatingHours    Json     // { monday: { open: "06:00", close: "22:00" }, ... }
+  blackoutDates     Json?    // [{ date: "2026-12-25", reason: "Christmas" }]
+  
+  // Stripe Connect
+  stripeAccountId   String?  // Stripe connected account ID
+  stripeOnboarded   Boolean  @default(false)
+  platformFeePercent Float   @default(2.9)
+  platformFeeFixed  Int      @default(30) // cents
+  
+  // Settings
+  cancellationPolicy Json?   // { fullRefundHours: 24, creditOnlyHours: 6, noRefundHours: 2 }
+  bookingBufferMin  Int      @default(15) // minutes between bookings
+  requireWaiver     Boolean  @default(true)
+  allowWalkIns      Boolean  @default(true)
+  unmannedMode      Boolean  @default(false)
+  
+  // AI Config
+  aiEnabled         Boolean  @default(true)
+  aiPhoneNumber     String?  // Twilio number for AI SMS assistant
+  aiKnowledgeBase   Json?    // Facility-specific info for AI context
+  
+  // Metadata
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  // Relations
+  spaces            Space[]
+  bookings          Booking[]
+  customers         Customer[]
+  memberships       MembershipTier[]
+  programs          Program[]
+  leagues           League[]
+  tournaments       Tournament[]
+  staff             StaffMember[]
+  waiverTemplates   WaiverTemplate[]
+  coupons           Coupon[]
+  giftCards         GiftCard[]
+  campaigns         Campaign[]
+  reports           Report[]
+  aiConversations   AIConversation[]
+  products          Product[]
+  
+  @@index([slug])
+  @@index([stripeAccountId])
+}
+
+// =============================================================
+// SPACES & RESOURCES
+// =============================================================
+
+model Space {
+  id                String   @id @default(cuid())
+  facilityId        String
+  facility          Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  
+  name              String   // "Turf Field 1", "Batting Cage A", "Weight Room"
+  type              SpaceType
+  description       String?
+  capacity          Int?     // max people
+  squareFootage     Int?
+  photos            String[] // S3 URLs
+  
+  // Pricing
+  hourlyRate        Int      // cents (e.g., 7500 = $75.00)
+  halfHourRate      Int?     // cents, for spaces that allow 30-min bookings
+  memberHourlyRate  Int?     // cents, discounted rate for members
+  
+  // Scheduling
+  operatingHours    Json?    // Override facility hours. Null = use facility hours
+  bufferMinutes     Int?     // Override facility default. Null = use facility default
+  minBookingMinutes Int      @default(60)  // minimum booking duration
+  maxBookingMinutes Int      @default(180) // maximum booking duration
+  bookingIncrements Int      @default(30)  // 30-min increments
+  
+  // Access Control
+  smartLockId       String?  // External smart lock device ID
+  accessControlType AccessControlType @default(NONE)
+  
+  // Group
+  groupName         String?  // "Turf Fields", "Batting Cages"
+  sortOrder         Int      @default(0)
+  
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  // Relations
+  bookings          Booking[]
+  programSessions   ProgramSession[]
+  leagueGames       LeagueGame[]
+  
+  @@index([facilityId])
+  @@index([facilityId, type])
+  @@index([facilityId, isActive])
+}
+
+enum SpaceType {
+  TURF_FIELD
+  GRASS_FIELD
+  COURT
+  BATTING_CAGE
+  PITCHING_TUNNEL
+  WEIGHT_ROOM
+  TRAINING_ROOM
+  CLASSROOM
+  PARTY_ROOM
+  POOL
+  TRACK
+  RINK
+  OTHER
+}
+
+enum AccessControlType {
+  NONE
+  QR_CODE
+  SMART_LOCK
+  NFC
+  PIN_CODE
+}
+
+// =============================================================
+// CUSTOMERS & FAMILIES
+// =============================================================
+
+model Customer {
+  id                String   @id @default(cuid())
+  facilityId        String
+  facility          Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  clerkUserId       String?  // Clerk user ID (null for manually added customers)
+  
+  // Profile
+  firstName         String
+  lastName          String
+  email             String
+  phone             String?
+  dateOfBirth       DateTime?
+  profilePhoto      String?
+  
+  // Family
+  householdId       String?  // Links family members together
+  isMinor           Boolean  @default(false)
+  parentCustomerId  String?  // If minor, link to parent
+  parentCustomer    Customer? @relation("ParentChild", fields: [parentCustomerId], references: [id])
+  children          Customer[] @relation("ParentChild")
+  
+  // Stripe
+  stripeCustomerId  String?
+  
+  // CRM
+  tags              String[] // ["active", "high-value", "team-coach"]
+  source            String?  // "website", "referral", "walk-in", "ai-sms"
+  notes             String?
+  
+  // Computed / Cached
+  lifetimeValue     Int      @default(0) // cents, total spent
+  totalBookings     Int      @default(0)
+  lastBookingDate   DateTime?
+  lastVisitDate     DateTime?
+  churnRisk         Float?   // 0-1, AI-calculated
+  
+  // Status
+  status            CustomerStatus @default(ACTIVE)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  // Relations
+  bookings          Booking[]
+  payments          Payment[]
+  membershipSubs    MembershipSubscription[]
+  registrations     Registration[]
+  waivers           WaiverSignature[]
+  accessCodes       AccessCode[]
+  communications    Communication[]
+  teamMemberships   TeamMember[]
+  
+  @@unique([facilityId, email])
+  @@index([facilityId])
+  @@index([facilityId, status])
+  @@index([facilityId, householdId])
+  @@index([clerkUserId])
+  @@index([stripeCustomerId])
+}
+
+enum CustomerStatus {
+  LEAD
+  ACTIVE
+  LAPSED     // No booking in 30+ days
+  CHURNED    // No booking in 90+ days
+  ARCHIVED
+}
+
+// =============================================================
+// BOOKINGS
+// =============================================================
+
+model Booking {
+  id                String   @id @default(cuid())
+  facilityId        String
+  facility          Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  spaceId           String
+  space             Space    @relation(fields: [spaceId], references: [id])
+  customerId        String
+  customer          Customer @relation(fields: [customerId], references: [id])
+  
+  // Timing
+  startTime         DateTime
+  endTime           DateTime
+  duration          Int      // minutes
+  
+  // Type & Recurrence
+  type              BookingType
+  recurringGroupId  String?  // Links recurring bookings together
+  recurringRule     Json?    // { frequency: "weekly", until: "2026-06-01" }
+  
+  // Staff
+  staffId           String?  // Assigned coach/instructor
+  staff             StaffMember? @relation(fields: [staffId], references: [id])
+  
+  // Pricing
+  subtotal          Int      // cents
+  discount          Int      @default(0) // cents
+  total             Int      // cents
+  couponId          String?
+  coupon            Coupon?  @relation(fields: [couponId], references: [id])
+  membershipApplied Boolean  @default(false) // Was member pricing used?
+  creditUsed        Int      @default(0) // Credit/punch card hours used
+  
+  // Status
+  status            BookingStatus @default(CONFIRMED)
+  cancelledAt       DateTime?
+  cancelledBy       String?  // "customer", "admin", "system"
+  cancellationReason String?
+  
+  // Check-in
+  checkedIn         Boolean  @default(false)
+  checkInTime       DateTime?
+  checkOutTime      DateTime?
+  
+  // Notes
+  customerNotes     String?  // Notes from customer during booking
+  adminNotes        String?  // Internal notes
+  
+  // Source
+  source            String   @default("web") // "web", "app", "ai-sms", "ai-chat", "admin", "walk-in"
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  // Relations
+  payment           Payment?
+  accessCode        AccessCode?
+  waitlistEntries   WaitlistEntry[]
+  
+  @@index([facilityId])
+  @@index([facilityId, spaceId, startTime, endTime])
+  @@index([facilityId, customerId])
+  @@index([facilityId, status])
+  @@index([facilityId, startTime])
+  @@index([recurringGroupId])
+}
+
+enum BookingType {
+  RENTAL          // Standard hourly rental
+  RECURRING       // Weekly/biweekly recurring
+  PRIVATE_LESSON  // 1-on-1 with coach
+  GROUP_CLASS     // Capacity-limited group session
+  OPEN_GYM        // Drop-in session
+  WALK_IN         // Booked on-site
+  EVENT           // Birthday party, corporate event
+  LEAGUE_GAME     // Auto-created from league schedule
+}
+
+enum BookingStatus {
+  PENDING         // Awaiting payment
+  CONFIRMED       // Paid and confirmed
+  CHECKED_IN      // Customer has arrived
+  COMPLETED       // Session ended
+  CANCELLED       // Cancelled by customer or admin
+  NO_SHOW         // Customer didn't show up
+}
+
+// =============================================================
+// WAITLIST
+// =============================================================
+
+model WaitlistEntry {
+  id                String   @id @default(cuid())
+  facilityId        String
+  customerId        String
+  customer          Customer @relation(fields: [customerId], references: [id])
+  
+  // What they're waiting for
+  spaceId           String?
+  bookingId         String?  // If waitlisted for a specific booking slot
+  booking           Booking? @relation(fields: [bookingId], references: [id])
+  programSessionId  String?
+  
+  // Preferences
+  preferredDate     DateTime?
+  preferredTimeStart String?  // "17:00"
+  preferredTimeEnd  String?  // "19:00"
+  
+  status            WaitlistStatus @default(WAITING)
+  notifiedAt        DateTime?
+  expiresAt         DateTime? // Auto-expire if not booked within X hours of notification
+  
+  createdAt         DateTime @default(now())
+  
+  @@index([facilityId, status])
+}
+
+enum WaitlistStatus {
+  WAITING
+  NOTIFIED    // Slot opened, customer notified
+  BOOKED      // Customer booked the slot
+  EXPIRED     // Notification expired
+  CANCELLED
+}
+
+// =============================================================
+// PAYMENTS
+// =============================================================
+
+model Payment {
+  id                String   @id @default(cuid())
+  facilityId        String
+  customerId        String
+  customer          Customer @relation(fields: [customerId], references: [id])
+  
+  // What this payment is for
+  type              PaymentType
+  bookingId         String?  @unique
+  booking           Booking? @relation(fields: [bookingId], references: [id])
+  membershipSubId   String?
+  membershipSub     MembershipSubscription? @relation(fields: [membershipSubId], references: [id])
+  registrationId    String?
+  registration      Registration? @relation(fields: [registrationId], references: [id])
+  
+  // Amounts (all in cents)
+  amount            Int
+  platformFee       Int      @default(0) // Our cut
+  stripeFee         Int      @default(0) // Stripe's cut
+  netAmount         Int      @default(0) // What facility receives
+  refundedAmount    Int      @default(0)
+  
+  // Stripe
+  stripePaymentIntentId String? @unique
+  stripeChargeId    String?
+  stripeRefundId    String?
+  
+  // Status
+  status            PaymentStatus @default(PENDING)
+  failedAt          DateTime?
+  failureReason     String?
+  retryCount        Int      @default(0)
+  nextRetryAt       DateTime?
+  
+  // Metadata
+  description       String?
+  receiptUrl        String?
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  @@index([facilityId])
+  @@index([facilityId, customerId])
+  @@index([facilityId, status])
+  @@index([stripePaymentIntentId])
+}
+
+enum PaymentType {
+  BOOKING
+  MEMBERSHIP
+  REGISTRATION
+  RETAIL
+  GIFT_CARD
+  INVOICE
+  OTHER
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  REFUNDED
+  PARTIALLY_REFUNDED
+  DISPUTED
+}
+
+// =============================================================
+// MEMBERSHIPS
+// =============================================================
+
+model MembershipTier {
+  id                String   @id @default(cuid())
+  facilityId        String
+  facility          Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  
+  name              String   // "Basic", "Premium", "VIP"
+  description       String?
+  
+  // Pricing
+  monthlyPrice      Int      // cents
+  annualPrice       Int?     // cents (discounted annual option)
+  
+  // Benefits (stored as JSON for flexibility)
+  benefits          Json     // { discountPercent: 15, freeHoursPerMonth: 8, priorityBookingHours: 24, exclusiveAccess: true }
+  
+  // Limits
+  maxHoursPerMonth  Int?     // null = unlimited
+  
+  // Stripe
+  stripeMonthlyPriceId String?
+  stripeAnnualPriceId  String?
+  
+  isActive          Boolean  @default(true)
+  sortOrder         Int      @default(0)
+  trialDays         Int      @default(0)
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  // Relations
+  subscriptions     MembershipSubscription[]
+  
+  @@index([facilityId])
+}
+
+model MembershipSubscription {
+  id                String   @id @default(cuid())
+  facilityId        String
+  customerId        String
+  customer          Customer @relation(fields: [customerId], references: [id])
+  tierId            String
+  tier              MembershipTier @relation(fields: [tierId], references: [id])
+  
+  // Stripe
+  stripeSubscriptionId String? @unique
+  billingCycle      BillingCycle @default(MONTHLY)
+  
+  // Usage tracking
+  hoursUsedThisPeriod Float  @default(0)
+  periodStart       DateTime
+  periodEnd         DateTime
+  
+  // Status
+  status            MembershipStatus @default(ACTIVE)
+  startDate         DateTime @default(now())
+  endDate           DateTime?
+  cancelledAt       DateTime?
+  pausedAt          DateTime?
+  pauseUntil        DateTime?
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  // Relations
+  payments          Payment[]
+  
+  @@index([facilityId])
+  @@index([facilityId, customerId])
+  @@index([facilityId, status])
+}
+
+enum BillingCycle {
+  MONTHLY
+  ANNUAL
+}
+
+enum MembershipStatus {
+  TRIALING
+  ACTIVE
+  PAUSED
+  PAST_DUE
+  CANCELLED
+  EXPIRED
+}
+
+// Credit / Punch Card Packages
+model CreditPackage {
+  id                String   @id @default(cuid())
+  facilityId        String
+  name              String   // "10-Session Pack", "20-Hour Bundle"
+  description       String?
+  
+  creditType        CreditType
+  totalCredits      Float    // 10 sessions or 20 hours
+  price             Int      // cents
+  expirationDays    Int?     // null = never expires
+  
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  
+  purchases         CreditPurchase[]
+  
+  @@index([facilityId])
+}
+
+model CreditPurchase {
+  id                String   @id @default(cuid())
+  customerId        String
+  packageId         String
+  package           CreditPackage @relation(fields: [packageId], references: [id])
+  
+  totalCredits      Float
+  remainingCredits  Float
+  expiresAt         DateTime?
+  
+  status            String   @default("active") // active, depleted, expired
+  createdAt         DateTime @default(now())
+  
+  @@index([customerId])
+}
+
+enum CreditType {
+  SESSIONS   // Count-based (10 sessions)
+  HOURS      // Time-based (20 hours)
+}
+
+// =============================================================
+// WAIVERS
+// =============================================================
+
+model WaiverTemplate {
+  id                String   @id @default(cuid())
+  facilityId        String
+  facility          Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  
+  name              String   // "General Liability Waiver", "Minor Waiver"
+  content           String   // Rich text / HTML content
+  type              WaiverType @default(GENERAL)
+  requiresMinorParent Boolean @default(false)
+  expirationMonths  Int      @default(12)
+  
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  signatures        WaiverSignature[]
+  
+  @@index([facilityId])
+}
+
+model WaiverSignature {
+  id                String   @id @default(cuid())
+  templateId        String
+  template          WaiverTemplate @relation(fields: [templateId], references: [id])
+  customerId        String
+  customer          Customer @relation(fields: [customerId], references: [id])
+  
+  // Signature
+  signatureData     String   // Base64 encoded signature image or typed name
+  signedByName      String
+  signedByEmail     String
+  
+  // Verification
+  ipAddress         String?
+  userAgent         String?
+  
+  // For minors
+  signedByParentId  String?  // Parent who signed on behalf of minor
+  
+  signedAt          DateTime @default(now())
+  expiresAt         DateTime
+  
+  @@index([customerId])
+  @@index([customerId, templateId])
+}
+
+enum WaiverType {
+  GENERAL
+  MINOR
+  ACTIVITY_SPECIFIC
+  PHOTO_RELEASE
+  CODE_OF_CONDUCT
+}
+
+// =============================================================
+// ACCESS CONTROL
+// =============================================================
+
+model AccessCode {
+  id                String   @id @default(cuid())
+  facilityId        String
+  customerId        String
+  customer          Customer @relation(fields: [customerId], references: [id])
+  bookingId         String?  @unique
+  booking           Booking? @relation(fields: [bookingId], references: [id])
+  
+  code              String   // PIN or QR data
+  type              AccessControlType
+  
+  validFrom         DateTime
+  validUntil        DateTime
+  
+  usedAt            DateTime?
+  isActive          Boolean  @default(true)
+  
+  createdAt         DateTime @default(now())
+  
+  @@index([facilityId])
+  @@index([code])
+  @@index([customerId])
+}
+
+// =============================================================
+// STAFF
+// =============================================================
+
+model StaffMember {
+  id                String   @id @default(cuid())
+  facilityId        String
+  facility          Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  clerkUserId       String?
+  
+  firstName         String
+  lastName          String
+  email             String
+  phone             String?
+  profilePhoto      String?
+  bio               String?
+  
+  role              StaffRole
+  permissions       Json?    // Granular permission overrides
+  
+  // Scheduling
+  availability      Json?    // { monday: [{ start: "09:00", end: "17:00" }], ... }
+  
+  // Pay
+  employmentType    EmploymentType @default(EMPLOYEE)
+  hourlyRate        Int?     // cents
+  commissionRate    Float?   // percentage per session
+  
+  // Sports/skills tags
+  sportTags         String[] // ["baseball", "pitching", "hitting"]
+  
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  // Relations
+  bookings          Booking[]
+  clockEntries      ClockEntry[]
+  programSessions   ProgramSession[]
+  leagueGames       LeagueGame[] @relation("GameReferees")
+  
+  @@unique([facilityId, email])
+  @@index([facilityId])
+}
+
+model ClockEntry {
+  id                String   @id @default(cuid())
+  staffId           String
+  staff             StaffMember @relation(fields: [staffId], references: [id])
+  
+  clockIn           DateTime
+  clockOut          DateTime?
+  totalMinutes      Int?
+  notes             String?
+  
+  createdAt         DateTime @default(now())
+  
+  @@index([staffId])
+}
+
+enum StaffRole {
+  OWNER
+  ADMIN
+  MANAGER
+  COACH
+  INSTRUCTOR
+  FRONT_DESK
+  MAINTENANCE
+}
+
+enum EmploymentType {
+  EMPLOYEE
+  CONTRACTOR
+}
+
+// =============================================================
+// PROGRAMS (Camps, Clinics, Classes)
+// =============================================================
+
+model Program {
+  id                String   @id @default(cuid())
+  facilityId        String
+  facility          Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  
+  name              String
+  description       String?
+  type              ProgramType
+  sport             String?
+  
+  // Eligibility
+  minAge            Int?
+  maxAge            Int?
+  skillLevel        String?  // "beginner", "intermediate", "advanced", "all"
+  gender            String?  // "male", "female", "all"
+  
+  // Capacity
+  maxCapacity       Int
+  currentEnrollment Int      @default(0)
+  waitlistEnabled   Boolean  @default(true)
+  
+  // Pricing
+  price             Int      // cents
+  memberPrice       Int?     // cents, discounted for members
+  earlyBirdPrice    Int?     // cents
+  earlyBirdDeadline DateTime?
+  paymentPlanEnabled Boolean @default(false)
+  paymentPlanInstallments Int? // number of installments
+  siblingDiscount   Int?     // cents off per additional sibling
+  
+  // Registration
+  registrationOpen  DateTime?
+  registrationClose DateTime?
+  customFields      Json?    // [{ label: "T-shirt size", type: "select", options: ["S","M","L","XL"], required: true }]
+  
+  // Schedule
+  startDate         DateTime
+  endDate           DateTime
+  
+  status            ProgramStatus @default(DRAFT)
+  isPublic          Boolean  @default(true) // false = members only
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  // Relations
+  sessions          ProgramSession[]
+  registrations     Registration[]
+  
+  @@index([facilityId])
+  @@index([facilityId, status])
+  @@index([facilityId, type])
+}
+
+model ProgramSession {
+  id                String   @id @default(cuid())
+  programId         String
+  program           Program  @relation(fields: [programId], references: [id], onDelete: Cascade)
+  spaceId           String?
+  space             Space?   @relation(fields: [spaceId], references: [id])
+  staffId           String?
+  staff             StaffMember? @relation(fields: [staffId], references: [id])
+  
+  date              DateTime
+  startTime         String   // "09:00"
+  endTime           String   // "12:00"
+  
+  // Attendance
+  attendees         Json?    // [{ customerId: "...", checkedIn: true, checkInTime: "..." }]
+  
+  notes             String?
+  
+  @@index([programId])
+}
+
+model Registration {
+  id                String   @id @default(cuid())
+  facilityId        String
+  programId         String
+  program           Program  @relation(fields: [programId], references: [id])
+  customerId        String
+  customer          Customer @relation(fields: [customerId], references: [id])
+  
+  // For multi-child: which child is registered
+  participantName   String
+  participantAge    Int?
+  
+  // Custom field responses
+  customFieldData   Json?
+  
+  // Payment
+  amount            Int      // cents
+  status            RegistrationStatus @default(PENDING)
+  
+  // Documents
+  documentsComplete Boolean  @default(false)
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  payment           Payment?
+  
+  @@index([facilityId])
+  @@index([programId])
+  @@index([customerId])
+}
+
+enum ProgramType {
+  CAMP
+  CLINIC
+  CLASS
+  GROUP_TRAINING
+  WORKSHOP
+  TRYOUT
+}
+
+enum ProgramStatus {
+  DRAFT
+  OPEN           // Registration open
+  FULL           // At capacity, waitlist only
+  IN_PROGRESS    // Started
+  COMPLETED
+  CANCELLED
+}
+
+enum RegistrationStatus {
+  PENDING
+  CONFIRMED
+  WAITLISTED
+  CANCELLED
+  REFUNDED
+}
+
+// =============================================================
+// LEAGUES & TOURNAMENTS
+// =============================================================
+
+model League {
+  id                String   @id @default(cuid())
+  facilityId        String
+  facility          Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  
+  name              String
+  sport             String
+  description       String?
+  
+  // Season
+  seasonName        String?  // "Spring 2026"
+  startDate         DateTime
+  endDate           DateTime
+  
+  // Format
+  format            LeagueFormat @default(ROUND_ROBIN)
+  divisions         Json?    // [{ name: "U12 Boys", ageMin: 10, ageMax: 12, gender: "male" }]
+  gamesPerTeam      Int?
+  
+  // Registration
+  teamFee           Int      // cents per team
+  registrationOpen  DateTime?
+  registrationClose DateTime?
+  maxTeams          Int?
+  
+  // Rules
+  gameLength        Int?     // minutes
+  tiebreakerRules   Json?    // ["head_to_head", "point_differential", "points_for"]
+  
+  // Playoff
+  playoffEnabled    Boolean  @default(true)
+  playoffTeams      Int?     // top N teams make playoffs
+  playoffFormat     String?  // "single_elimination", "double_elimination"
+  
+  status            LeagueStatus @default(DRAFT)
+  isPublic          Boolean  @default(true)
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  teams             Team[]
+  games             LeagueGame[]
+  standings         LeagueStanding[]
+  
+  @@index([facilityId])
+}
+
+model Tournament {
+  id                String   @id @default(cuid())
+  facilityId        String
+  facility          Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  
+  name              String
+  sport             String
+  description       String?
+  
+  // Dates
+  startDate         DateTime
+  endDate           DateTime
+  
+  // Format
+  format            TournamentFormat @default(SINGLE_ELIMINATION)
+  divisions         Json?
+  poolPlayEnabled   Boolean  @default(false)
+  poolSize          Int?
+  
+  // Registration
+  teamFee           Int      // cents
+  registrationOpen  DateTime?
+  registrationClose DateTime?
+  maxTeams          Int?
+  
+  // Scheduling
+  gameLength        Int?     // minutes
+  breakBetweenGames Int?     // minutes
+  venueIds          String[] // Can span multiple venues/facilities
+  
+  status            TournamentStatus @default(DRAFT)
+  brackets          Json?    // Full bracket state
+  isPublic          Boolean  @default(true)
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  teams             Team[]
+  games             LeagueGame[]
+  
+  @@index([facilityId])
+}
+
+model Team {
+  id                String   @id @default(cuid())
+  facilityId        String
+  leagueId          String?
+  league            League?  @relation(fields: [leagueId], references: [id])
+  tournamentId      String?
+  tournament        Tournament? @relation(fields: [tournamentId], references: [id])
+  
+  name              String
+  division          String?
+  
+  // Contact
+  coachName         String?
+  coachEmail        String?
+  coachPhone        String?
+  
+  // Registration
+  registrationPaid  Boolean  @default(false)
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  members           TeamMember[]
+  homeGames         LeagueGame[] @relation("HomeTeam")
+  awayGames         LeagueGame[] @relation("AwayTeam")
+  standings         LeagueStanding[]
+  
+  @@index([leagueId])
+  @@index([tournamentId])
+}
+
+model TeamMember {
+  id                String   @id @default(cuid())
+  teamId            String
+  team              Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  customerId        String?
+  customer          Customer? @relation(fields: [customerId], references: [id])
+  
+  name              String
+  jerseyNumber      String?
+  position          String?
+  role              String   @default("player") // "player", "coach", "assistant_coach", "manager"
+  
+  createdAt         DateTime @default(now())
+  
+  @@index([teamId])
+}
+
+model LeagueGame {
+  id                String   @id @default(cuid())
+  facilityId        String
+  leagueId          String?
+  league            League?  @relation(fields: [leagueId], references: [id])
+  tournamentId      String?
+  tournament        Tournament? @relation(fields: [tournamentId], references: [id])
+  
+  // Teams
+  homeTeamId        String
+  homeTeam          Team     @relation("HomeTeam", fields: [homeTeamId], references: [id])
+  awayTeamId        String
+  awayTeam          Team     @relation("AwayTeam", fields: [awayTeamId], references: [id])
+  
+  // Schedule
+  spaceId           String?
+  space             Space?   @relation(fields: [spaceId], references: [id])
+  scheduledDate     DateTime
+  scheduledTime     String   // "18:00"
+  
+  // Score
+  homeScore         Int?
+  awayScore         Int?
+  
+  // Officials
+  referees          StaffMember[] @relation("GameReferees")
+  
+  // Status
+  status            GameStatus @default(SCHEDULED)
+  round             Int?     // Round/week number
+  poolName          String?  // For pool play
+  bracketPosition   String?  // For tournament brackets
+  
+  notes             String?
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  @@index([leagueId])
+  @@index([tournamentId])
+  @@index([homeTeamId])
+  @@index([awayTeamId])
+}
+
+model LeagueStanding {
+  id                String   @id @default(cuid())
+  leagueId          String
+  league            League   @relation(fields: [leagueId], references: [id])
+  teamId            String
+  team              Team     @relation(fields: [teamId], references: [id])
+  division          String?
+  
+  wins              Int      @default(0)
+  losses            Int      @default(0)
+  ties              Int      @default(0)
+  pointsFor         Int      @default(0)
+  pointsAgainst     Int      @default(0)
+  
+  // Calculated
+  winPercentage     Float    @default(0)
+  pointDifferential Int      @default(0)
+  rank              Int?
+  
+  updatedAt         DateTime @updatedAt
+  
+  @@unique([leagueId, teamId])
+  @@index([leagueId])
+}
+
+enum LeagueFormat {
+  ROUND_ROBIN
+  POOL_PLAY
+  SINGLE_ELIMINATION
+  DOUBLE_ELIMINATION
+  SWISS
+}
+
+enum TournamentFormat {
+  SINGLE_ELIMINATION
+  DOUBLE_ELIMINATION
+  ROUND_ROBIN
+  POOL_PLAY_TO_BRACKET
+}
+
+enum LeagueStatus {
+  DRAFT
+  REGISTRATION_OPEN
+  REGISTRATION_CLOSED
+  IN_PROGRESS
+  PLAYOFFS
+  COMPLETED
+  CANCELLED
+}
+
+enum TournamentStatus {
+  DRAFT
+  REGISTRATION_OPEN
+  REGISTRATION_CLOSED
+  POOL_PLAY
+  BRACKET_PLAY
+  COMPLETED
+  CANCELLED
+}
+
+enum GameStatus {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  POSTPONED
+  CANCELLED
+  FORFEIT
+}
+
+// =============================================================
+// COUPONS & GIFT CARDS
+// =============================================================
+
+model Coupon {
+  id                String   @id @default(cuid())
+  facilityId        String
+  facility          Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  
+  code              String
+  description       String?
+  
+  type              CouponType // PERCENTAGE or FIXED_AMOUNT
+  value             Int      // percent (15) or cents (1500)
+  
+  // Limits
+  maxUses           Int?     // null = unlimited
+  usedCount         Int      @default(0)
+  maxUsesPerCustomer Int     @default(1)
+  minPurchase       Int?     // cents
+  
+  // Validity
+  validFrom         DateTime?
+  validUntil        DateTime?
+  
+  // Scope
+  applicableTo      String[] // ["booking", "membership", "program", "all"]
+  
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  
+  bookings          Booking[]
+  
+  @@unique([facilityId, code])
+  @@index([facilityId])
+}
+
+enum CouponType {
+  PERCENTAGE
+  FIXED_AMOUNT
+}
+
+model GiftCard {
+  id                String   @id @default(cuid())
+  facilityId        String
+  facility          Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  
+  code              String   @unique
+  initialBalance    Int      // cents
+  currentBalance    Int      // cents
+  
+  purchasedById     String?
+  recipientEmail    String?
+  recipientName     String?
+  message           String?
+  
+  expiresAt         DateTime?
+  isActive          Boolean  @default(true)
+  
+  createdAt         DateTime @default(now())
+  
+  @@index([facilityId])
+  @@index([code])
+}
+
+// =============================================================
+// COMMUNICATIONS & MARKETING
+// =============================================================
+
+model Communication {
+  id                String   @id @default(cuid())
+  facilityId        String
+  customerId        String?
+  customer          Customer? @relation(fields: [customerId], references: [id])
+  
+  channel           CommChannel // EMAIL, SMS, PUSH, IN_APP
+  direction         CommDirection // INBOUND, OUTBOUND
+  type              CommType  // TRANSACTIONAL, MARKETING, AI_CONVERSATION
+  
+  subject           String?
+  body              String
+  
+  // Status
+  status            CommStatus @default(PENDING)
+  sentAt            DateTime?
+  deliveredAt       DateTime?
+  openedAt          DateTime?
+  clickedAt         DateTime?
+  failedAt          DateTime?
+  failureReason     String?
+  
+  // Campaign
+  campaignId        String?
+  campaign          Campaign? @relation(fields: [campaignId], references: [id])
+  
+  // AI
+  aiConversationId  String?
+  
+  createdAt         DateTime @default(now())
+  
+  @@index([facilityId])
+  @@index([customerId])
+  @@index([campaignId])
+}
+
+model Campaign {
+  id                String   @id @default(cuid())
+  facilityId        String
+  facility          Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  
+  name              String
+  channel           CommChannel
+  subject           String?
+  body              String
+  
+  // Targeting
+  segmentCriteria   Json?    // { tags: ["active"], membershipStatus: "active", lastBookingDaysAgo: { min: 0, max: 30 } }
+  recipientCount    Int      @default(0)
+  
+  // Schedule
+  scheduledFor      DateTime?
+  sentAt            DateTime?
+  
+  // Results
+  sent              Int      @default(0)
+  delivered         Int      @default(0)
+  opened            Int      @default(0)
+  clicked           Int      @default(0)
+  converted         Int      @default(0) // Booked or purchased after receiving
+  
+  // AI-generated
+  aiGenerated       Boolean  @default(false)
+  aiTrigger         String?  // "lapsed_customer", "empty_slots", "season_end"
+  
+  status            CampaignStatus @default(DRAFT)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  communications    Communication[]
+  
+  @@index([facilityId])
+}
+
+enum CommChannel {
+  EMAIL
+  SMS
+  PUSH
+  IN_APP
+}
+
+enum CommDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum CommType {
+  TRANSACTIONAL   // Booking confirmation, receipt, reminder
+  MARKETING       // Campaigns, promotions
+  AI_CONVERSATION // AI assistant interactions
+  SYSTEM          // Waiver reminders, payment failures
+}
+
+enum CommStatus {
+  PENDING
+  SENT
+  DELIVERED
+  OPENED
+  CLICKED
+  FAILED
+  BOUNCED
+}
+
+enum CampaignStatus {
+  DRAFT
+  SCHEDULED
+  SENDING
+  SENT
+  CANCELLED
+}
+
+// =============================================================
+// AI CONVERSATIONS
+// =============================================================
+
+model AIConversation {
+  id                String   @id @default(cuid())
+  facilityId        String
+  facility          Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  customerId        String?  // null if new/unknown customer
+  
+  channel           String   // "sms", "web_chat", "email"
+  externalId        String?  // Twilio message SID, etc.
+  
+  messages          Json     // [{ role: "user"|"assistant", content: "...", timestamp: "..." }]
+  
+  // Outcome
+  outcome           String?  // "booking_created", "question_answered", "escalated", "no_action"
+  bookingCreated    String?  // booking ID if one was created
+  escalated         Boolean  @default(false)
+  escalationReason  String?
+  
+  // Tool calls made
+  toolCalls         Json?    // [{ tool: "check_availability", input: {...}, output: {...} }]
+  
+  status            String   @default("active") // "active", "completed", "escalated"
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  @@index([facilityId])
+  @@index([customerId])
+}
+
+// =============================================================
+// RETAIL / PRO SHOP (V2)
+// =============================================================
+
+model Product {
+  id                String   @id @default(cuid())
+  facilityId        String
+  facility          Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  
+  name              String
+  description       String?
+  category          String?
+  photos            String[]
+  
+  price             Int      // cents
+  cost              Int?     // cents, for margin tracking
+  
+  // Inventory
+  trackInventory    Boolean  @default(true)
+  quantity          Int      @default(0)
+  lowStockThreshold Int      @default(5)
+  
+  // Variants
+  variants          Json?    // [{ name: "Size", options: ["S","M","L","XL"] }]
+  
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  @@index([facilityId])
+}
+
+// =============================================================
+// REPORTS (cached/scheduled)
+// =============================================================
+
+model Report {
+  id                String   @id @default(cuid())
+  facilityId        String
+  facility          Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  
+  type              String   // "daily_summary", "weekly_review", "monthly_financial"
+  period            String   // "2026-02-28", "2026-W09", "2026-02"
+  data              Json     // The computed report data
+  
+  aiInsights        String?  // AI-generated narrative insights
+  aiRecommendations Json?    // [{ action: "...", expectedImpact: "..." }]
+  
+  generatedAt       DateTime @default(now())
+  
+  @@unique([facilityId, type, period])
+  @@index([facilityId])
+}
