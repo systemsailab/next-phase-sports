@@ -14,7 +14,7 @@ export function LeaveWaitlistButton({ entryId }: { entryId: string }) {
       className="text-slate-400 hover:text-red-500 text-xs"
       disabled={pending}
       onClick={() => {
-        startTransition(() => leaveWaitlist(entryId));
+        startTransition(async () => { await leaveWaitlist(entryId); });
       }}
     >
       {pending ? "Removing..." : "Leave"}

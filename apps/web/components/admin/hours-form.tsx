@@ -7,11 +7,9 @@ import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import {
-  OperatingHoursSchema,
-  OperatingHoursInput,
-  updateOperatingHours,
-} from "@/lib/actions/facility";
+import { OperatingHoursSchema } from "@/lib/schemas/facility";
+import type { OperatingHoursInput } from "@/lib/schemas/facility";
+import { updateOperatingHours } from "@/lib/actions/facility";
 
 const DAYS = [
   { key: "monday", label: "Monday" },

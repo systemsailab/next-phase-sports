@@ -22,7 +22,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { FacilitySchema, FacilityInput, updateFacilityInfo } from "@/lib/actions/facility";
+import { FacilitySchema } from "@/lib/schemas/facility";
+import type { FacilityInput } from "@/lib/schemas/facility";
+import { updateFacilityInfo } from "@/lib/actions/facility";
 
 const TIMEZONES = [
   "America/New_York",

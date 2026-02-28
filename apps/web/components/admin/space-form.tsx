@@ -25,12 +25,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  SPACE_TYPES,
-  createSpace,
-  updateSpace,
-  type SpaceInput,
-} from "@/lib/actions/spaces";
+import { SPACE_TYPES, type SpaceInput } from "@/lib/schemas/spaces";
+import { createSpace, updateSpace } from "@/lib/actions/spaces";
 
 // Local form schema: uses z.number() so react-hook-form infers types correctly
 // (SpaceSchema uses z.coerce.number() which causes zodResolver type inference issues)

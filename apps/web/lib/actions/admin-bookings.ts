@@ -85,7 +85,7 @@ export async function adminCreateCustomer({
 
 // ─── Admin: Create booking for any customer ──────────────────────────────────
 
-export const AdminCreateBookingSchema = z.object({
+const AdminCreateBookingSchema = z.object({
   spaceId: z.string(),
   customerId: z.string(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -96,7 +96,7 @@ export const AdminCreateBookingSchema = z.object({
   skipConflictCheck: z.boolean().default(false),
 });
 
-export type AdminCreateBookingInput = z.infer<typeof AdminCreateBookingSchema>;
+type AdminCreateBookingInput = z.infer<typeof AdminCreateBookingSchema>;
 
 export async function adminCreateBooking(input: AdminCreateBookingInput) {
   const facilityId = await getCurrentFacilityId();

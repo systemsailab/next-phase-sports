@@ -4,7 +4,6 @@ import { auth } from "@clerk/nextjs/server";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { getCurrentFacilityId } from "./facility";
-export { notifyWaitlistForSlot } from "@/lib/waitlist-helpers";
 
 // ─── Join Waitlist ──────────────────────────────────────────────────────────
 
@@ -130,5 +129,3 @@ export async function leaveWaitlist(waitlistEntryId: string) {
   revalidatePath("/schedule");
   return { success: true };
 }
-
-// notifyWaitlistForSlot is re-exported from @/lib/waitlist-helpers above

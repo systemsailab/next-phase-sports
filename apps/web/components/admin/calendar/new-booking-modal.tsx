@@ -31,7 +31,7 @@ interface CustomerResult {
   firstName: string;
   lastName: string;
   email: string;
-  phone: string;
+  phone: string | null;
 }
 
 interface Props {
@@ -126,6 +126,7 @@ export function NewBookingModal({ spaces, defaultDate, children }: Props) {
           startMinutes: selectedStart,
           durationMinutes: selectedDuration,
           source,
+          skipConflictCheck: false,
           adminNotes: adminNotes || undefined,
         });
         setSuccess(true);

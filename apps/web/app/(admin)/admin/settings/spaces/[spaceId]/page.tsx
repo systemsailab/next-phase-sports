@@ -1,10 +1,10 @@
 import { notFound } from "next/navigation";
 import { getSpace } from "@/lib/actions/spaces";
+import type { SpaceInput } from "@/lib/schemas/spaces";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { SpaceForm } from "@/components/admin/space-form";
-import type { SpaceInput } from "@/lib/actions/spaces";
 
 interface EditSpacePageProps {
   params: Promise<{ spaceId: string }>;

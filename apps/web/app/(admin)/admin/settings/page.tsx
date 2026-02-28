@@ -10,7 +10,7 @@ import type {
   OperatingHoursInput,
   CancellationPolicyInput,
   FacilityInput,
-} from "@/lib/actions/facility";
+} from "@/lib/schemas/facility";
 
 export default async function SettingsPage() {
   const facility = await getFacility();

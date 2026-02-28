@@ -71,7 +71,7 @@ function BookingCard({ booking }: { booking: BookingBlock }) {
           className="mt-1 text-blue-600 hover:underline text-xs"
           onClick={(e) => {
             e.stopPropagation();
-            startTransition(() => adminUpdateBookingStatus(booking.id, "CHECKED_IN"));
+            startTransition(async () => { await adminUpdateBookingStatus(booking.id, "CHECKED_IN"); });
           }}
         >
           Check In

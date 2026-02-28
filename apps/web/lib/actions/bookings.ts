@@ -12,7 +12,7 @@ import { inngest } from "@/lib/inngest/client";
 
 // ─── Schemas ─────────────────────────────────────────────────────────────────
 
-export const CreateBookingSchema = z.object({
+const CreateBookingSchema = z.object({
   spaceId: z.string(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be YYYY-MM-DD"),
   startMinutes: z.number().int().nonnegative(), // minutes from midnight in facility TZ
@@ -22,7 +22,7 @@ export const CreateBookingSchema = z.object({
   customerId: z.string().optional(),
 });
 
-export type CreateBookingInput = z.infer<typeof CreateBookingSchema>;
+type CreateBookingInput = z.infer<typeof CreateBookingSchema>;
 
 // ─── Create Booking ───────────────────────────────────────────────────────────
 

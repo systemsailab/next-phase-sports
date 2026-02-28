@@ -16,10 +16,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { z } from "zod";
-import {
-  CancellationPolicyInput,
-  updateFacilityPolicies,
-} from "@/lib/actions/facility";
+import type { CancellationPolicyInput } from "@/lib/schemas/facility";
+import { updateFacilityPolicies } from "@/lib/actions/facility";
 
 // Local schema using z.number() (not coerce) since fields are React-controlled
 const PoliciesFormSchema = z.object({

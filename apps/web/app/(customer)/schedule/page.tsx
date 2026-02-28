@@ -220,7 +220,7 @@ export default async function MySchedulePage() {
                         hour: "numeric",
                         minute: "2-digit",
                       })}
-                      {payment.method && <> &middot; {payment.method}</>}
+                      {payment.stripeChargeId && <> &middot; Card</>}
                     </p>
                   </div>
                 </div>

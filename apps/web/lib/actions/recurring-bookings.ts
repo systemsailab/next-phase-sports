@@ -10,7 +10,7 @@ import { getAvailability } from "./availability";
 import { sendBookingConfirmation } from "@/lib/email";
 import { inngest } from "@/lib/inngest/client";
 
-export const CreateRecurringBookingSchema = z.object({
+const CreateRecurringBookingSchema = z.object({
   spaceId: z.string(),
   startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), // first occurrence
   startMinutes: z.number().int().nonnegative(),
@@ -19,7 +19,7 @@ export const CreateRecurringBookingSchema = z.object({
   customerNotes: z.string().optional(),
 });
 
-export type CreateRecurringBookingInput = z.infer<typeof CreateRecurringBookingSchema>;
+type CreateRecurringBookingInput = z.infer<typeof CreateRecurringBookingSchema>;
 
 export async function createRecurringBookings(input: CreateRecurringBookingInput) {
   const facilityId = await getCurrentFacilityId();
@@ -218,8 +218,8 @@ export async function cancelRecurringGroup(recurringGroupId: string) {
     select: { id: true },
   });
 
-  const adminCheck = await db.facilityAdmin.findFirst({
-    where: { facilityId, clerkUserId: userId },
+  const adminCheck = await db.staffMember.findFirst({
+    where: { facilityId, clerkUserId: userId, role: { in: ["OWNER", "ADMIN", "MANAGER"] } },
   });
 
   if (!customer && !adminCheck) throw new Error("Unauthorized");
