@@ -1,9 +1,11 @@
 import { getMyBookings } from "@/lib/actions/bookings";
+import { getMyWaitlist } from "@/lib/actions/waitlist";
 import { db } from "@/lib/db";
 import { getCurrentFacilityId } from "@/lib/actions/facility";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CancelBookingButton } from "@/components/booking/cancel-button";
+import { LeaveWaitlistButton } from "@/components/booking/leave-waitlist-button";
 import { spaceTypeLabel, formatCents } from "@/lib/booking-utils";
 import Link from "next/link";
 
@@ -45,9 +47,10 @@ export default async function MySchedulePage() {
 
   const tz = facility?.timezone ?? "America/New_York";
 
-  const [upcoming, past] = await Promise.all([
+  const [upcoming, past, waitlist] = await Promise.all([
     getMyBookings("upcoming"),
     getMyBookings("past"),
+    getMyWaitlist(),
   ]);
 
   return (
@@ -109,6 +112,50 @@ export default async function MySchedulePage() {
           </div>
         )}
       </section>
+
+      {/* Waitlist */}
+      {waitlist.length > 0 && (
+        <section>
+          <h2 className="text-lg font-semibold text-slate-800 mb-3">
+            Waitlist ({waitlist.length})
+          </h2>
+          <div className="space-y-3">
+            {waitlist.map((entry) => (
+              <div
+                key={entry.id}
+                className="flex items-start justify-between gap-4 rounded-xl border border-amber-200 bg-amber-50 p-4"
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="font-medium text-slate-800 truncate">
+                      {entry.space?.name ?? "Any space"}
+                    </span>
+                    <Badge variant="outline" className="text-xs shrink-0 border-amber-300 text-amber-700">
+                      {entry.status === "NOTIFIED" ? "⚡ Slot Available!" : "Waiting"}
+                    </Badge>
+                  </div>
+                  {entry.preferredDate && (
+                    <p className="text-sm text-slate-500">
+                      {new Date(entry.preferredDate).toLocaleDateString("en-US", {
+                        weekday: "short", month: "long", day: "numeric",
+                      })}
+                    </p>
+                  )}
+                  {(entry.preferredTimeStart || entry.preferredTimeEnd) && (
+                    <p className="text-xs text-slate-400">
+                      {entry.preferredTimeStart} – {entry.preferredTimeEnd}
+                    </p>
+                  )}
+                  <p className="text-xs text-slate-400 mt-1">
+                    Joined {new Date(entry.createdAt).toLocaleDateString()}
+                  </p>
+                </div>
+                <LeaveWaitlistButton entryId={entry.id} />
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Past */}
       {past.length > 0 && (

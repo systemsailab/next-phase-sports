@@ -8,6 +8,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useUser, SignInButton } from "@clerk/nextjs";
 import { getAvailability } from "@/lib/actions/availability";
 import { createBooking } from "@/lib/actions/bookings";
+import { createRecurringBookings } from "@/lib/actions/recurring-bookings";
+import { joinWaitlist } from "@/lib/actions/waitlist";
 import type { DayAvailability } from "@/lib/booking-utils";
 import {
   computeAvailableSlots,
@@ -16,7 +18,7 @@ import {
   formatCents,
 } from "@/lib/booking-utils";
 
-type Step = "date" | "time" | "confirm" | "done";
+type Step = "date" | "time" | "confirm" | "done" | "waitlisted";
 
 interface SpaceInfo {
   id: string;
@@ -85,6 +87,15 @@ export function BookingFlow({ space }: Props) {
   const [selectedStart, setSelectedStart] = useState<number | null>(null);
   const [selectedDuration, setSelectedDuration] = useState<number | null>(null);
 
+  // Recurring
+  const [isRecurring, setIsRecurring] = useState(false);
+  const [recurringWeeks, setRecurringWeeks] = useState(4);
+  const [recurringCount, setRecurringCount] = useState<number | null>(null);
+
+  // Waitlist
+  const [waitlistPending, startWaitlistTransition] = useTransition();
+  const [waitlistError, setWaitlistError] = useState<string | null>(null);
+
   const [confirming, startConfirming] = useTransition();
   const [bookingResult, setBookingResult] = useState<{
     id: string;
@@ -151,15 +162,32 @@ export function BookingFlow({ space }: Props) {
 
     startConfirming(async () => {
       try {
-        const result = await createBooking({
-          spaceId: space.id,
-          date: dateStr,
-          startMinutes: selectedStart,
-          durationMinutes: selectedDuration,
-        });
-        if (result.success) {
-          setBookingResult({ id: result.bookingId });
-          setStep("done");
+        if (isRecurring) {
+          const result = await createRecurringBookings({
+            spaceId: space.id,
+            startDate: dateStr,
+            startMinutes: selectedStart,
+            durationMinutes: selectedDuration,
+            weeks: recurringWeeks,
+          });
+          if (result.success) {
+            setRecurringCount(result.count);
+            setBookingResult({ id: result.firstBookingId ?? "" });
+            setStep("done");
+          } else {
+            setBookingError(result.error ?? "Failed to create recurring bookings.");
+          }
+        } else {
+          const result = await createBooking({
+            spaceId: space.id,
+            date: dateStr,
+            startMinutes: selectedStart,
+            durationMinutes: selectedDuration,
+          });
+          if (result.success) {
+            setBookingResult({ id: result.bookingId });
+            setStep("done");
+          }
         }
       } catch (err) {
         setBookingError(
@@ -171,15 +199,50 @@ export function BookingFlow({ space }: Props) {
 
   // ─── RENDER ───────────────────────────────────────────────────────────────
 
-  if (step === "done" && bookingResult && availability && selectedStart !== null && selectedDuration !== null) {
+  // Waitlisted confirmation screen
+  if (step === "waitlisted") {
     return (
       <Card>
         <CardContent className="pt-8 pb-8 text-center space-y-4">
-          <div className="text-4xl">🎉</div>
+          <div className="text-4xl">📋</div>
           <div>
-            <h2 className="text-xl font-bold text-slate-900">Booking Confirmed!</h2>
+            <h2 className="text-xl font-bold text-slate-900">You're on the waitlist!</h2>
             <p className="text-slate-500 text-sm mt-1">
-              Your session has been reserved.
+              We'll email you if a slot opens up on{" "}
+              {selectedDate?.toLocaleDateString("en-US", { weekday: "short", month: "long", day: "numeric" })}.
+            </p>
+          </div>
+          <div className="bg-slate-50 rounded-xl p-4 text-sm max-w-xs mx-auto">
+            <div className="flex justify-between">
+              <span className="text-slate-500">Space</span>
+              <span className="font-medium text-slate-900">{space.name}</span>
+            </div>
+          </div>
+          <div className="flex gap-3 justify-center pt-2">
+            <Button variant="outline" asChild>
+              <a href="/schedule">My Schedule</a>
+            </Button>
+            <Button className="bg-emerald-500 hover:bg-emerald-600" asChild>
+              <a href="/book">Browse Spaces</a>
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+    const isRec = recurringCount !== null && recurringCount > 1;
+    return (
+      <Card>
+        <CardContent className="pt-8 pb-8 text-center space-y-4">
+          <div className="text-4xl">{isRec ? "🔁" : "🎉"}</div>
+          <div>
+            <h2 className="text-xl font-bold text-slate-900">
+              {isRec ? `${recurringCount} Sessions Booked!` : "Booking Confirmed!"}
+            </h2>
+            <p className="text-slate-500 text-sm mt-1">
+              {isRec
+                ? `Repeating every week for ${recurringCount} weeks. Check your email for confirmation.`
+                : "Your session has been reserved. Check your email for confirmation."}
             </p>
           </div>
           <div className="bg-emerald-50 rounded-xl p-4 text-sm text-left space-y-2 max-w-xs mx-auto">
@@ -188,7 +251,7 @@ export function BookingFlow({ space }: Props) {
               <span className="font-medium text-slate-900">{space.name}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-slate-500">Date</span>
+              <span className="text-slate-500">{isRec ? "First Date" : "Date"}</span>
               <span className="font-medium text-slate-900">
                 {selectedDate?.toLocaleDateString("en-US", { weekday: "short", month: "long", day: "numeric", year: "numeric" })}
               </span>
@@ -196,7 +259,7 @@ export function BookingFlow({ space }: Props) {
             <div className="flex justify-between">
               <span className="text-slate-500">Time</span>
               <span className="font-medium text-slate-900">
-                {minutesToTimeLabel(selectedStart)} – {minutesToTimeLabel(selectedStart + selectedDuration)}
+                {minutesToTimeLabel(selectedStart)} \u2013 {minutesToTimeLabel(selectedStart + selectedDuration)}
               </span>
             </div>
             <div className="flex justify-between">
@@ -205,7 +268,7 @@ export function BookingFlow({ space }: Props) {
             </div>
             {selectedPrice !== null && (
               <div className="flex justify-between border-t pt-2 mt-2">
-                <span className="text-slate-500">Total</span>
+                <span className="text-slate-500">{isRec ? "Per Session" : "Total"}</span>
                 <span className="font-semibold text-emerald-600">{formatCents(selectedPrice)}</span>
               </div>
             )}
@@ -272,9 +335,50 @@ export function BookingFlow({ space }: Props) {
               </div>
 
               {uniqueStartTimes.length === 0 ? (
-                <p className="text-slate-400 text-sm text-center py-8">
-                  No available times on this date.
-                </p>
+                <div className="text-center py-8 space-y-3">
+                  <p className="text-slate-400 text-sm">No available times on this date.</p>
+                  {isSignedIn ? (
+                    <>
+                      <p className="text-slate-400 text-xs">
+                        Join the waitlist and we'll notify you if a slot opens up.
+                      </p>
+                      {waitlistError && (
+                        <p className="text-xs text-red-500">{waitlistError}</p>
+                      )}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={waitlistPending}
+                        onClick={() => {
+                          setWaitlistError(null);
+                          startWaitlistTransition(async () => {
+                            try {
+                              await joinWaitlist({
+                                spaceId: space.id,
+                                preferredDate: dateStr,
+                                preferredTimeStart: "00:00",
+                                preferredTimeEnd: "23:59",
+                              });
+                              setStep("waitlisted");
+                            } catch (err) {
+                              setWaitlistError(
+                                err instanceof Error ? err.message : "Failed to join waitlist"
+                              );
+                            }
+                          });
+                        }}
+                      >
+                        {waitlistPending ? "Joining..." : "📋 Join Waitlist"}
+                      </Button>
+                    </>
+                  ) : (
+                    <SignInButton mode="modal">
+                      <Button size="sm" variant="outline">
+                        Sign in to join waitlist
+                      </Button>
+                    </SignInButton>
+                  )}
+                </div>
               ) : (
                 <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
                   {uniqueStartTimes.map((start) => (
@@ -384,10 +488,65 @@ export function BookingFlow({ space }: Props) {
               </div>
               {selectedPrice !== null && (
                 <div className="flex justify-between border-t pt-3 mt-1">
-                  <span className="text-slate-700 font-semibold">Total</span>
-                  <span className="font-bold text-emerald-600 text-base">
-                    {formatCents(selectedPrice)}
+                  <span className="text-slate-700 font-semibold">
+                    {isRecurring ? `Per Session \u00d7 ${recurringWeeks}` : "Total"}
                   </span>
+                  <span className="font-bold text-emerald-600 text-base">
+                    {isRecurring
+                      ? formatCents(selectedPrice * recurringWeeks)
+                      : formatCents(selectedPrice)}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Recurring toggle */}
+            <div className="border border-slate-200 rounded-xl p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-slate-800">🔁 Repeat Weekly</p>
+                  <p className="text-xs text-slate-400 mt-0.5">Same time, every week</p>
+                </div>
+                <button
+                  onClick={() => setIsRecurring((v) => !v)}
+                  className={`w-11 h-6 rounded-full transition-colors relative ${
+                    isRecurring ? "bg-emerald-500" : "bg-slate-200"
+                  }`}
+                >
+                  <span
+                    className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${
+                      isRecurring ? "translate-x-5" : "translate-x-0.5"
+                    }`}
+                  />
+                </button>
+              </div>
+              {isRecurring && (
+                <div className="space-y-2">
+                  <p className="text-xs text-slate-500">How many weeks?</p>
+                  <div className="flex gap-2 flex-wrap">
+                    {[2, 4, 6, 8, 10, 12].map((w) => (
+                      <button
+                        key={w}
+                        onClick={() => setRecurringWeeks(w)}
+                        className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
+                          recurringWeeks === w
+                            ? "bg-emerald-500 text-white border-emerald-500"
+                            : "text-slate-700 border-slate-200 hover:border-emerald-400"
+                        }`}
+                      >
+                        {w}w
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-slate-400">
+                    Ends{" "}
+                    {(() => {
+                      if (!selectedDate) return "";
+                      const end = new Date(selectedDate);
+                      end.setDate(end.getDate() + (recurringWeeks - 1) * 7);
+                      return end.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+                    })()}
+                  </p>
                 </div>
               )}
             </div>
@@ -422,7 +581,11 @@ export function BookingFlow({ space }: Props) {
                   onClick={handleConfirm}
                   disabled={confirming}
                 >
-                  {confirming ? "Confirming..." : "Confirm Booking"}
+                  {confirming
+                    ? "Confirming..."
+                    : isRecurring
+                    ? `Confirm ${recurringWeeks} Weekly Sessions`
+                    : "Confirm Booking"}
                 </Button>
               </div>
             )}

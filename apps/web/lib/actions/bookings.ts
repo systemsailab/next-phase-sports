@@ -7,6 +7,8 @@ import { z } from "zod";
 import { fromZonedTime } from "date-fns-tz";
 import { getCurrentFacilityId } from "./facility";
 import { getAvailability } from "./availability";
+import { sendBookingConfirmation } from "@/lib/email";
+import { inngest } from "@/lib/inngest/client";
 
 // ─── Schemas ─────────────────────────────────────────────────────────────────
 
@@ -126,6 +128,55 @@ export async function createBooking(input: CreateBookingInput) {
     return bk;
   });
 
+  // Send confirmation email + schedule reminders
+  const customer = await db.customer.findUnique({
+    where: { id: customerId },
+    select: { firstName: true, lastName: true, email: true },
+  });
+  const facility = await db.facility.findUnique({
+    where: { id: facilityId },
+    select: { name: true },
+  });
+
+  if (customer?.email) {
+    const fmtDate = new Intl.DateTimeFormat("en-US", {
+      timeZone: tz, weekday: "long", month: "long", day: "numeric", year: "numeric",
+    }).format(startTime);
+    const fmtStart = new Intl.DateTimeFormat("en-US", {
+      timeZone: tz, hour: "numeric", minute: "2-digit", hour12: true,
+    }).format(startTime);
+    const fmtEnd = new Intl.DateTimeFormat("en-US", {
+      timeZone: tz, hour: "numeric", minute: "2-digit", hour12: true,
+    }).format(endTime);
+
+    sendBookingConfirmation({
+      to: customer.email,
+      customerName: `${customer.firstName} ${customer.lastName}`.trim(),
+      spaceName: space.name,
+      facilityName: facility?.name ?? "The facility",
+      date: fmtDate,
+      startTime: fmtStart,
+      endTime: fmtEnd,
+      duration: data.durationMinutes,
+      total: subtotal,
+      bookingId: booking.id,
+    }).catch((err) => console.error("[email] confirmation failed:", err));
+
+    inngest.send({
+      name: "booking/created",
+      data: {
+        bookingId: booking.id,
+        startTime: startTime.toISOString(),
+        endTime: endTime.toISOString(),
+        customerEmail: customer.email,
+        customerName: `${customer.firstName} ${customer.lastName}`.trim(),
+        spaceName: space.name,
+        facilityName: facility?.name ?? "The facility",
+        facilityTimezone: tz,
+      },
+    }).catch((err) => console.error("[inngest] send failed:", err));
+  }
+
   revalidatePath("/admin/calendar");
   revalidatePath("/schedule");
   return { success: true, bookingId: booking.id };
@@ -182,10 +233,21 @@ export async function cancelBooking(bookingId: string, reason?: string) {
 
   revalidatePath("/admin/calendar");
   revalidatePath("/schedule");
+
+  // Notify waitlist via Inngest
+  inngest.send({
+    name: "booking/cancelled",
+    data: {
+      bookingId: booking.id,
+      spaceId: booking.spaceId,
+      startTime: booking.startTime.toISOString(),
+      endTime: booking.endTime.toISOString(),
+      facilityId: booking.facilityId,
+    },
+  }).catch((err) => console.error("[inngest] cancel event failed:", err));
+
   return { success: true };
 }
-
-// ─── Read: Customer bookings ──────────────────────────────────────────────────
 
 export async function getMyBookings(status?: "upcoming" | "past" | "all") {
   const { userId } = await auth();
