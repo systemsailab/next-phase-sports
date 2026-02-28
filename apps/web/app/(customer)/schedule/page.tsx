@@ -1,5 +1,6 @@
 import { getMyBookings } from "@/lib/actions/bookings";
 import { getMyWaitlist } from "@/lib/actions/waitlist";
+import { getMyPayments } from "@/lib/actions/payments";
 import { db } from "@/lib/db";
 import { getCurrentFacilityId } from "@/lib/actions/facility";
 import { Badge } from "@/components/ui/badge";
@@ -16,6 +17,24 @@ function statusBadgeVariant(status: string): "default" | "secondary" | "destruct
     case "COMPLETED": return "secondary";
     case "CANCELLED": return "destructive";
     default: return "outline";
+  }
+}
+
+function paymentStatusBadge(status: string) {
+  switch (status) {
+    case "SUCCEEDED":
+      return { variant: "default" as const, className: "bg-emerald-100 text-emerald-700 border-emerald-200", label: "Paid" };
+    case "PENDING":
+    case "PROCESSING":
+      return { variant: "outline" as const, className: "border-amber-300 text-amber-700 bg-amber-50", label: "Pending" };
+    case "FAILED":
+      return { variant: "destructive" as const, className: "", label: "Failed" };
+    case "REFUNDED":
+      return { variant: "outline" as const, className: "border-blue-300 text-blue-700 bg-blue-50", label: "Refunded" };
+    case "PARTIALLY_REFUNDED":
+      return { variant: "outline" as const, className: "border-blue-300 text-blue-700 bg-blue-50", label: "Partial Refund" };
+    default:
+      return { variant: "outline" as const, className: "", label: status };
   }
 }
 
@@ -47,10 +66,11 @@ export default async function MySchedulePage() {
 
   const tz = facility?.timezone ?? "America/New_York";
 
-  const [upcoming, past, waitlist] = await Promise.all([
+  const [upcoming, past, waitlist, payments] = await Promise.all([
     getMyBookings("upcoming"),
     getMyBookings("past"),
     getMyWaitlist(),
+    getMyPayments(),
   ]);
 
   return (
@@ -153,6 +173,59 @@ export default async function MySchedulePage() {
                 <LeaveWaitlistButton entryId={entry.id} />
               </div>
             ))}
+          </div>
+        </section>
+      )}
+
+      {/* Payment History */}
+      {payments.length > 0 && (
+        <section>
+          <h2 className="text-lg font-semibold text-slate-800 mb-3">
+            Payment History ({payments.length})
+          </h2>
+          <div className="space-y-3">
+            {payments.map((payment) => {
+              const badge = paymentStatusBadge(payment.status);
+              return (
+                <div
+                  key={payment.id}
+                  className="flex items-start justify-between gap-4 rounded-xl border border-slate-200 bg-white p-4"
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="font-semibold text-slate-900">
+                        {formatCents(payment.amount)}
+                      </span>
+                      <Badge variant={badge.variant} className={`text-xs shrink-0 ${badge.className}`}>
+                        {badge.label}
+                      </Badge>
+                      {payment.refundedAmount > 0 && payment.status !== "REFUNDED" && (
+                        <span className="text-xs text-blue-600">
+                          ({formatCents(payment.refundedAmount)} refunded)
+                        </span>
+                      )}
+                    </div>
+                    {payment.booking && (
+                      <p className="text-sm text-slate-500">
+                        {payment.booking.space.name} &middot;{" "}
+                        {formatLocalTime(payment.booking.startTime, tz)} &middot;{" "}
+                        {payment.booking.duration} min
+                      </p>
+                    )}
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      {new Date(payment.createdAt).toLocaleDateString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                        hour: "numeric",
+                        minute: "2-digit",
+                      })}
+                      {payment.method && <> &middot; {payment.method}</>}
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </section>
       )}

@@ -97,7 +97,7 @@ export async function createBooking(input: CreateBookingInput) {
         type: "RENTAL",
         subtotal,
         total: subtotal,
-        status: "CONFIRMED", // No payment yet in Phase 2 — confirm immediately
+        status: "PENDING", // Phase 3: PENDING until payment succeeds
         source: "web",
         customerNotes: data.customerNotes,
       },
@@ -129,53 +129,69 @@ export async function createBooking(input: CreateBookingInput) {
   });
 
   // Send confirmation email + schedule reminders
-  const customer = await db.customer.findUnique({
-    where: { id: customerId },
-    select: { firstName: true, lastName: true, email: true },
-  });
-  const facility = await db.facility.findUnique({
-    where: { id: facilityId },
-    select: { name: true },
-  });
+  // For paid bookings (PENDING status), the Stripe webhook handles confirmation
+  // after payment_intent.succeeded. Only send immediately for free/zero-cost bookings.
+  if (subtotal === 0) {
+    // Free booking — confirm immediately
+    await db.booking.update({
+      where: { id: booking.id },
+      data: { status: "CONFIRMED" },
+    });
+    await db.payment.updateMany({
+      where: { bookingId: booking.id },
+      data: { status: "SUCCEEDED" },
+    });
 
-  if (customer?.email) {
-    const fmtDate = new Intl.DateTimeFormat("en-US", {
-      timeZone: tz, weekday: "long", month: "long", day: "numeric", year: "numeric",
-    }).format(startTime);
-    const fmtStart = new Intl.DateTimeFormat("en-US", {
-      timeZone: tz, hour: "numeric", minute: "2-digit", hour12: true,
-    }).format(startTime);
-    const fmtEnd = new Intl.DateTimeFormat("en-US", {
-      timeZone: tz, hour: "numeric", minute: "2-digit", hour12: true,
-    }).format(endTime);
+    const customer = await db.customer.findUnique({
+      where: { id: customerId },
+      select: { firstName: true, lastName: true, email: true },
+    });
+    const facility = await db.facility.findUnique({
+      where: { id: facilityId },
+      select: { name: true },
+    });
 
-    sendBookingConfirmation({
-      to: customer.email,
-      customerName: `${customer.firstName} ${customer.lastName}`.trim(),
-      spaceName: space.name,
-      facilityName: facility?.name ?? "The facility",
-      date: fmtDate,
-      startTime: fmtStart,
-      endTime: fmtEnd,
-      duration: data.durationMinutes,
-      total: subtotal,
-      bookingId: booking.id,
-    }).catch((err) => console.error("[email] confirmation failed:", err));
+    if (customer?.email) {
+      const fmtDate = new Intl.DateTimeFormat("en-US", {
+        timeZone: tz, weekday: "long", month: "long", day: "numeric", year: "numeric",
+      }).format(startTime);
+      const fmtStart = new Intl.DateTimeFormat("en-US", {
+        timeZone: tz, hour: "numeric", minute: "2-digit", hour12: true,
+      }).format(startTime);
+      const fmtEnd = new Intl.DateTimeFormat("en-US", {
+        timeZone: tz, hour: "numeric", minute: "2-digit", hour12: true,
+      }).format(endTime);
 
-    inngest.send({
-      name: "booking/created",
-      data: {
-        bookingId: booking.id,
-        startTime: startTime.toISOString(),
-        endTime: endTime.toISOString(),
-        customerEmail: customer.email,
+      sendBookingConfirmation({
+        to: customer.email,
         customerName: `${customer.firstName} ${customer.lastName}`.trim(),
         spaceName: space.name,
         facilityName: facility?.name ?? "The facility",
-        facilityTimezone: tz,
-      },
-    }).catch((err) => console.error("[inngest] send failed:", err));
+        date: fmtDate,
+        startTime: fmtStart,
+        endTime: fmtEnd,
+        duration: data.durationMinutes,
+        total: subtotal,
+        bookingId: booking.id,
+      }).catch((err) => console.error("[email] confirmation failed:", err));
+
+      inngest.send({
+        name: "booking/created",
+        data: {
+          bookingId: booking.id,
+          startTime: startTime.toISOString(),
+          endTime: endTime.toISOString(),
+          customerEmail: customer.email,
+          customerName: `${customer.firstName} ${customer.lastName}`.trim(),
+          spaceName: space.name,
+          facilityName: facility?.name ?? "The facility",
+          facilityTimezone: tz,
+        },
+      }).catch((err) => console.error("[inngest] send failed:", err));
+    }
   }
+  // For paid bookings (subtotal > 0), confirmation email + reminders are sent
+  // from the Stripe webhook handler after payment succeeds.
 
   revalidatePath("/admin/calendar");
   revalidatePath("/schedule");
@@ -268,7 +284,7 @@ export async function getMyBookings(status?: "upcoming" | "past" | "all") {
     customerId: customer.id,
     facilityId,
     ...(status === "upcoming"
-      ? { startTime: { gte: now }, status: { in: ["CONFIRMED", "PENDING", "CHECKED_IN"] as const } }
+      ? { startTime: { gte: now }, status: { in: ["CONFIRMED" as const, "PENDING" as const, "CHECKED_IN" as const] } }
       : status === "past"
       ? { endTime: { lte: now } }
       : {}),

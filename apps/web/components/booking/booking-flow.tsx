@@ -10,6 +10,7 @@ import { getAvailability } from "@/lib/actions/availability";
 import { createBooking } from "@/lib/actions/bookings";
 import { createRecurringBookings } from "@/lib/actions/recurring-bookings";
 import { joinWaitlist } from "@/lib/actions/waitlist";
+import { PaymentForm } from "@/components/booking/payment-form";
 import type { DayAvailability } from "@/lib/booking-utils";
 import {
   computeAvailableSlots,
@@ -18,7 +19,7 @@ import {
   formatCents,
 } from "@/lib/booking-utils";
 
-type Step = "date" | "time" | "confirm" | "done" | "waitlisted";
+type Step = "date" | "time" | "confirm" | "payment" | "done" | "waitlisted";
 
 interface SpaceInfo {
   id: string;
@@ -41,6 +42,7 @@ function StepIndicator({ current }: { current: Step }) {
     { key: "date", label: "Date" },
     { key: "time", label: "Time & Duration" },
     { key: "confirm", label: "Confirm" },
+    { key: "payment", label: "Payment" },
   ];
   const idx = steps.findIndex((s) => s.key === current);
 
@@ -171,9 +173,10 @@ export function BookingFlow({ space }: Props) {
             weeks: recurringWeeks,
           });
           if (result.success) {
-            setRecurringCount(result.count);
+            setRecurringCount(result.count ?? null);
             setBookingResult({ id: result.firstBookingId ?? "" });
-            setStep("done");
+            // Recurring bookings: go to payment for first session
+            setStep("payment");
           } else {
             setBookingError(result.error ?? "Failed to create recurring bookings.");
           }
@@ -186,7 +189,8 @@ export function BookingFlow({ space }: Props) {
           });
           if (result.success) {
             setBookingResult({ id: result.bookingId });
-            setStep("done");
+            // Go to payment step instead of done
+            setStep("payment");
           }
         }
       } catch (err) {
@@ -230,6 +234,9 @@ export function BookingFlow({ space }: Props) {
       </Card>
     );
   }
+
+  // Done / confirmation screen
+  if (step === "done" && bookingResult) {
     const isRec = recurringCount !== null && recurringCount > 1;
     return (
       <Card>
@@ -256,16 +263,20 @@ export function BookingFlow({ space }: Props) {
                 {selectedDate?.toLocaleDateString("en-US", { weekday: "short", month: "long", day: "numeric", year: "numeric" })}
               </span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-slate-500">Time</span>
-              <span className="font-medium text-slate-900">
-                {minutesToTimeLabel(selectedStart)} \u2013 {minutesToTimeLabel(selectedStart + selectedDuration)}
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-slate-500">Duration</span>
-              <span className="font-medium text-slate-900">{selectedDuration} min</span>
-            </div>
+            {selectedStart !== null && selectedDuration !== null && (
+              <div className="flex justify-between">
+                <span className="text-slate-500">Time</span>
+                <span className="font-medium text-slate-900">
+                  {minutesToTimeLabel(selectedStart)} – {minutesToTimeLabel(selectedStart + selectedDuration)}
+                </span>
+              </div>
+            )}
+            {selectedDuration !== null && (
+              <div className="flex justify-between">
+                <span className="text-slate-500">Duration</span>
+                <span className="font-medium text-slate-900">{selectedDuration} min</span>
+              </div>
+            )}
             {selectedPrice !== null && (
               <div className="flex justify-between border-t pt-2 mt-2">
                 <span className="text-slate-500">{isRec ? "Per Session" : "Total"}</span>
@@ -274,7 +285,7 @@ export function BookingFlow({ space }: Props) {
             )}
           </div>
           <div className="text-xs text-slate-400">
-            Booking ID: <span className="font-mono">{bookingResult.id.slice(0, 8).toUpperCase()}</span>
+            Booking ID: <span className="font-mono">{bookingResult!.id.slice(0, 8).toUpperCase()}</span>
           </div>
           <div className="flex gap-3 justify-center pt-2">
             <Button variant="outline" asChild>
@@ -286,6 +297,65 @@ export function BookingFlow({ space }: Props) {
           </div>
         </CardContent>
       </Card>
+    );
+  }
+
+  // ─── STEP: PAYMENT ─────────────────────────────────────────────────────────
+  if (step === "payment" && bookingResult) {
+    const paymentAmount = isRecurring && selectedPrice
+      ? selectedPrice * recurringWeeks
+      : selectedPrice ?? 0;
+
+    return (
+      <div className="space-y-6">
+        <StepIndicator current={step} />
+        <Card>
+          <CardContent className="pt-6 space-y-4">
+            <div className="text-center mb-2">
+              <h2 className="font-semibold text-slate-800 text-lg">Complete Payment</h2>
+              <p className="text-slate-500 text-sm mt-1">
+                {space.name} — {selectedDuration} min{isRecurring ? ` × ${recurringWeeks} weeks` : ""}
+              </p>
+            </div>
+
+            <div className="bg-slate-50 rounded-xl p-4 space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-slate-500">Date</span>
+                <span className="font-medium text-slate-900">
+                  {selectedDate?.toLocaleDateString("en-US", { weekday: "short", month: "long", day: "numeric" })}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Time</span>
+                <span className="font-medium text-slate-900">
+                  {selectedStart !== null && selectedDuration
+                    ? `${minutesToTimeLabel(selectedStart)} – ${minutesToTimeLabel(selectedStart + selectedDuration)}`
+                    : "—"}
+                </span>
+              </div>
+              <div className="flex justify-between border-t pt-2 mt-2">
+                <span className="font-semibold text-slate-700">Total</span>
+                <span className="font-bold text-emerald-600 text-base">
+                  {formatCents(paymentAmount)}
+                </span>
+              </div>
+            </div>
+
+            <PaymentForm
+              bookingId={bookingResult.id}
+              amount={paymentAmount}
+              onSuccess={() => setStep("done")}
+              onError={(msg) => setBookingError(msg)}
+            />
+
+            {bookingError && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-red-600 text-sm text-center">
+                {bookingError}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     );
   }
 
