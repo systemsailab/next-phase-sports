@@ -1,7 +1,7 @@
 import { inngest } from "./client";
 import { sendBookingReminder } from "@/lib/email";
 import { db } from "@/lib/db";
-import { notifyWaitlistForSlot } from "@/lib/actions/waitlist";
+import { notifyWaitlistForSlot } from "@/lib/waitlist-helpers";
 
 // ─── Send booking reminders (24hr + 1hr before) ───────────────────────────────
 

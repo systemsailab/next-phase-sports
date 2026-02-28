@@ -14,6 +14,7 @@ const isPublicRoute = createRouteMatcher([
   "/tournaments/(.*)",
   "/api/webhooks/(.*)",
   "/api/ai/chat",
+  "/api/inngest",
 ]);
 
 // When Clerk is not yet configured (no publishable key), skip auth entirely.
