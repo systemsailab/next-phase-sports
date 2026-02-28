@@ -214,6 +214,7 @@ model Customer {
   accessCodes       AccessCode[]
   communications    Communication[]
   teamMemberships   TeamMember[]
+  waitlistEntries   WaitlistEntry[]
   
   @@unique([facilityId, email])
   @@index([facilityId])
@@ -375,7 +376,7 @@ model Payment {
   booking           Booking? @relation(fields: [bookingId], references: [id])
   membershipSubId   String?
   membershipSub     MembershipSubscription? @relation(fields: [membershipSubId], references: [id])
-  registrationId    String?
+  registrationId    String?  @unique
   registration      Registration? @relation(fields: [registrationId], references: [id])
   
   // Amounts (all in cents)
