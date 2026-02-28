@@ -47,29 +47,31 @@ function StepIndicator({ current }: { current: Step }) {
   const idx = steps.findIndex((s) => s.key === current);
 
   return (
-    <div className="flex items-center gap-2 mb-6">
+    <div className="flex items-center gap-1 sm:gap-2 mb-8 bg-slate-100/80 rounded-2xl p-2 sm:p-3">
       {steps.map((step, i) => (
-        <div key={step.key} className="flex items-center gap-2">
-          <div
-            className={`w-6 h-6 rounded-full text-xs font-semibold flex items-center justify-center ${
-              i < idx
-                ? "bg-emerald-500 text-white"
-                : i === idx
-                ? "bg-emerald-500 text-white"
-                : "bg-slate-200 text-slate-500"
-            }`}
-          >
-            {i < idx ? "✓" : i + 1}
+        <div key={step.key} className="flex items-center gap-1.5 sm:gap-2 flex-1">
+          <div className="flex items-center gap-1.5 sm:gap-2 flex-1">
+            <div
+              className={`w-7 h-7 rounded-xl text-xs font-bold flex items-center justify-center shrink-0 transition-all duration-200 ${
+                i < idx
+                  ? "bg-emerald-500 text-white shadow-sm shadow-emerald-500/20"
+                  : i === idx
+                  ? "bg-emerald-500 text-white shadow-sm shadow-emerald-500/20"
+                  : "bg-white text-slate-400 border border-slate-200"
+              }`}
+            >
+              {i < idx ? "✓" : i + 1}
+            </div>
+            <span
+              className={`text-xs sm:text-sm truncate transition-colors ${
+                i === idx ? "text-slate-900 font-semibold" : i < idx ? "text-emerald-600 font-medium" : "text-slate-400"
+              }`}
+            >
+              {step.label}
+            </span>
           </div>
-          <span
-            className={`text-sm ${
-              i === idx ? "text-slate-900 font-medium" : "text-slate-400"
-            }`}
-          >
-            {step.label}
-          </span>
           {i < steps.length - 1 && (
-            <div className="w-6 h-px bg-slate-200 mx-1" />
+            <div className={`w-4 sm:w-8 h-px shrink-0 ${i < idx ? "bg-emerald-300" : "bg-slate-200"}`} />
           )}
         </div>
       ))}
@@ -206,27 +208,29 @@ export function BookingFlow({ space }: Props) {
   // Waitlisted confirmation screen
   if (step === "waitlisted") {
     return (
-      <Card>
-        <CardContent className="pt-8 pb-8 text-center space-y-4">
-          <div className="text-4xl">📋</div>
+      <Card className="border-0 shadow-lg">
+        <CardContent className="pt-10 pb-10 text-center space-y-5">
+          <div className="w-16 h-16 rounded-2xl bg-amber-50 flex items-center justify-center mx-auto">
+            <span className="text-3xl">📋</span>
+          </div>
           <div>
-            <h2 className="text-xl font-bold text-slate-900">You're on the waitlist!</h2>
-            <p className="text-slate-500 text-sm mt-1">
-              We'll email you if a slot opens up on{" "}
+            <h2 className="text-xl font-extrabold text-slate-900">You&apos;re on the waitlist!</h2>
+            <p className="text-slate-500 text-sm mt-1.5 leading-relaxed">
+              We&apos;ll email you if a slot opens up on{" "}
               {selectedDate?.toLocaleDateString("en-US", { weekday: "short", month: "long", day: "numeric" })}.
             </p>
           </div>
-          <div className="bg-slate-50 rounded-xl p-4 text-sm max-w-xs mx-auto">
+          <div className="bg-slate-50 rounded-2xl p-5 text-sm max-w-xs mx-auto">
             <div className="flex justify-between">
               <span className="text-slate-500">Space</span>
-              <span className="font-medium text-slate-900">{space.name}</span>
+              <span className="font-semibold text-slate-900">{space.name}</span>
             </div>
           </div>
           <div className="flex gap-3 justify-center pt-2">
-            <Button variant="outline" asChild>
+            <Button variant="outline" className="rounded-xl" asChild>
               <a href="/schedule">My Schedule</a>
             </Button>
-            <Button className="bg-emerald-500 hover:bg-emerald-600" asChild>
+            <Button className="bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-sm shadow-emerald-600/20" asChild>
               <a href="/book">Browse Spaces</a>
             </Button>
           </div>
@@ -239,11 +243,13 @@ export function BookingFlow({ space }: Props) {
   if (step === "done" && bookingResult) {
     const isRec = recurringCount !== null && recurringCount > 1;
     return (
-      <Card>
-        <CardContent className="pt-8 pb-8 text-center space-y-4">
-          <div className="text-4xl">{isRec ? "🔁" : "🎉"}</div>
+      <Card className="border-0 shadow-lg">
+        <CardContent className="pt-10 pb-10 text-center space-y-5">
+          <div className="w-16 h-16 rounded-2xl bg-emerald-50 flex items-center justify-center mx-auto">
+            <span className="text-3xl">{isRec ? "🔁" : "🎉"}</span>
+          </div>
           <div>
-            <h2 className="text-xl font-bold text-slate-900">
+            <h2 className="text-xl font-extrabold text-slate-900">
               {isRec ? `${recurringCount} Sessions Booked!` : "Booking Confirmed!"}
             </h2>
             <p className="text-slate-500 text-sm mt-1">
@@ -252,7 +258,7 @@ export function BookingFlow({ space }: Props) {
                 : "Your session has been reserved. Check your email for confirmation."}
             </p>
           </div>
-          <div className="bg-emerald-50 rounded-xl p-4 text-sm text-left space-y-2 max-w-xs mx-auto">
+          <div className="bg-emerald-50/60 rounded-2xl p-5 text-sm text-left space-y-2.5 max-w-xs mx-auto">
             <div className="flex justify-between">
               <span className="text-slate-500">Space</span>
               <span className="font-medium text-slate-900">{space.name}</span>
@@ -288,10 +294,10 @@ export function BookingFlow({ space }: Props) {
             Booking ID: <span className="font-mono">{bookingResult!.id.slice(0, 8).toUpperCase()}</span>
           </div>
           <div className="flex gap-3 justify-center pt-2">
-            <Button variant="outline" asChild>
+            <Button variant="outline" className="rounded-xl" asChild>
               <a href="/schedule">My Schedule</a>
             </Button>
-            <Button className="bg-emerald-500 hover:bg-emerald-600" asChild>
+            <Button className="bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-sm shadow-emerald-600/20" asChild>
               <a href="/book">Book Another</a>
             </Button>
           </div>
@@ -455,10 +461,10 @@ export function BookingFlow({ space }: Props) {
                     <button
                       key={start}
                       onClick={() => { setSelectedStart(start); setSelectedDuration(null); }}
-                      className={`py-2 px-3 rounded-lg text-sm font-medium border transition-colors ${
+                      className={`py-2.5 px-3 rounded-xl text-sm font-semibold border transition-all duration-200 ${
                         selectedStart === start
-                          ? "bg-emerald-500 text-white border-emerald-500"
-                          : "bg-white text-slate-700 border-slate-200 hover:border-emerald-400 hover:text-emerald-600"
+                          ? "bg-emerald-600 text-white border-emerald-600 shadow-sm shadow-emerald-600/20"
+                          : "bg-white text-slate-700 border-slate-200 hover:border-emerald-300 hover:bg-emerald-50/50"
                       }`}
                     >
                       {minutesToTimeLabel(start)}
@@ -478,15 +484,15 @@ export function BookingFlow({ space }: Props) {
                     <button
                       key={opt.value}
                       onClick={() => setSelectedDuration(opt.value)}
-                      className={`py-3 px-4 rounded-lg text-sm border transition-colors flex flex-col items-center ${
+                      className={`py-3.5 px-4 rounded-xl text-sm border transition-all duration-200 flex flex-col items-center gap-0.5 ${
                         selectedDuration === opt.value
-                          ? "bg-emerald-500 text-white border-emerald-500"
-                          : "bg-white text-slate-700 border-slate-200 hover:border-emerald-400"
+                          ? "bg-emerald-600 text-white border-emerald-600 shadow-sm shadow-emerald-600/20"
+                          : "bg-white text-slate-700 border-slate-200 hover:border-emerald-300 hover:bg-emerald-50/50"
                       }`}
                     >
-                      <span className="font-semibold">{opt.label}</span>
+                      <span className="font-bold">{opt.label}</span>
                       <span
-                        className={`text-xs ${
+                        className={`text-xs font-medium ${
                           selectedDuration === opt.value ? "text-emerald-100" : "text-slate-400"
                         }`}
                       >
@@ -498,7 +504,7 @@ export function BookingFlow({ space }: Props) {
 
                 {selectedDuration !== null && (
                   <Button
-                    className="w-full mt-4 bg-emerald-500 hover:bg-emerald-600"
+                  className="w-full mt-4 bg-emerald-600 hover:bg-emerald-700 rounded-xl font-semibold shadow-sm shadow-emerald-600/20"
                     onClick={() => setStep("confirm")}
                   >
                     Review Booking →
@@ -633,7 +639,7 @@ export function BookingFlow({ space }: Props) {
                   Sign in to complete your booking
                 </p>
                 <SignInButton mode="modal">
-                  <Button className="w-full bg-emerald-500 hover:bg-emerald-600">
+                  <Button className="w-full bg-emerald-600 hover:bg-emerald-700 rounded-xl font-semibold shadow-sm shadow-emerald-600/20">
                     Sign In to Confirm
                   </Button>
                 </SignInButton>
@@ -647,7 +653,7 @@ export function BookingFlow({ space }: Props) {
                   </p>
                 )}
                 <Button
-                  className="w-full bg-emerald-500 hover:bg-emerald-600"
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 rounded-xl font-semibold shadow-sm shadow-emerald-600/20"
                   onClick={handleConfirm}
                   disabled={confirming}
                 >
