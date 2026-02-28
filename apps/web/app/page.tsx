@@ -27,9 +27,12 @@ export default function Home() {
         <p className="text-xl text-slate-400 max-w-2xl mx-auto mb-12">
           Bookings, memberships, leagues, tournaments, waivers, and payments — all managed by AI. No manual work required.
         </p>
-        <div className="flex items-center justify-center gap-4">
+        <div className="flex flex-wrap items-center justify-center gap-4">
           <Link href="/sign-up" className="bg-blue-600 hover:bg-blue-500 text-white px-8 py-4 rounded-xl font-semibold text-lg transition-colors">
             Start Free Trial
+          </Link>
+          <Link href="/admin/dashboard" className="bg-emerald-600 hover:bg-emerald-500 text-white px-8 py-4 rounded-xl font-semibold text-lg transition-colors">
+            View Demo Dashboard →
           </Link>
           <Link href="#features" className="border border-white/20 hover:border-white/40 text-white px-8 py-4 rounded-xl font-semibold text-lg transition-colors">
             Learn More
