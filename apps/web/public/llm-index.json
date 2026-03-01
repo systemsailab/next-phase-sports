@@ -1,0 +1,20 @@
+{
+  "@context": "https://llmld.org/context.json",
+  "@type": "LLMIndex",
+  "name": "Next Phase Sports",
+  "url": "https://nextphasesports.com",
+  "description": "AI-powered autonomous sports facility management platform for handling bookings, leagues, tournaments, memberships, and scheduling with minimal manual intervention.",
+  "llmstxt": "https://nextphasesports.com/llms.txt",
+  "llmstxtFull": "https://nextphasesports.com/llms-full.txt",
+  "version": "1.0",
+  "lastUpdated": "2026-03-01",
+  "language": "en",
+  "category": "SaaS / Sports Technology",
+  "audience": "Sports facility owners, gym operators, recreational league administrators",
+  "keyPages": [
+    { "url": "https://nextphasesports.com/", "title": "Next Phase Sports — AI Sports Facility Management" },
+    { "url": "https://nextphasesports.com/pricing", "title": "Pricing — Next Phase Sports" },
+    { "url": "https://nextphasesports.com/demo", "title": "Book a Demo — Next Phase Sports" },
+    { "url": "https://nextphasesports.com/signup", "title": "Start Free Trial — Next Phase Sports" }
+  ]
+}

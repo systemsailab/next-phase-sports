@@ -1,0 +1,73 @@
+# Next Phase Sports — Full Content Index
+
+> AI-powered autonomous sports facility management platform.
+
+## About Next Phase Sports
+
+Next Phase Sports is a multi-tenant SaaS platform for sports facility operators. It automates the full operations lifecycle of a sports facility: from online booking and membership management to league administration, AI-driven scheduling, and smart access control. Operators can run their facility with minimal manual intervention.
+
+## Core Feature Areas
+
+### Booking & Scheduling
+- Real-time court/field/facility availability calendar
+- Self-service online booking for walk-ins, members, and league players
+- AI auto-fill: automatically offers open slots to waitlisted players
+- Recurring booking support for training groups and regular players
+- Conflict resolution: AI detects and resolves double-bookings automatically
+
+### League & Tournament Management
+- League creation with season scheduling, standings, and stats tracking
+- Tournament bracket generation (single elimination, double elimination, round robin)
+- Team and player registration with online payment
+- Game result reporting and automatic standings updates
+- Referee and staff assignment tools
+
+### Membership Management
+- Tiered membership plans (monthly, annual, punch passes)
+- Stripe Connect billing with automatic renewal
+- Member portal: book courts, view history, manage account
+- Smart lock integration via Kisi — members unlock facilities via mobile app
+- Access log tracking per member
+
+### AI & Automation
+- Autonomous scheduling assistant (Claude API via Vercel AI SDK)
+- Smart notification engine: SMS (Twilio) and email (Resend) for reminders, cancellations, and win-back
+- Automated dunning sequences for failed payments
+- Customer service AI for handling common inquiries
+- Utilization analytics and revenue optimization recommendations
+
+### Admin Dashboard
+- Facility performance metrics (utilization rate, revenue per court, peak hours)
+- Staff management and role-based access (Clerk multi-tenant auth)
+- Payout management via Stripe Connect
+- Reporting: revenue, bookings, membership churn, and league activity
+
+## Platform Details
+
+- Tech: Next.js 15, React, TypeScript, Prisma, PostgreSQL (Railway), Clerk, Stripe Connect, Twilio, Resend, Inngest, Kisi
+- Deployment: Vercel (frontend) + Railway (database)
+- Mobile: Fully responsive, mobile-optimized for facility check-ins
+
+## Key Links
+
+- [Home](https://nextphasesports.com/): Platform overview
+- [Pricing](https://nextphasesports.com/pricing): Subscription plans for facility operators
+- [Book a Demo](https://nextphasesports.com/demo): Schedule a product walkthrough
+- [Sign Up](https://nextphasesports.com/signup): Start your free trial
+
+## Frequently Asked Questions
+
+**What types of sports facilities use Next Phase Sports?**
+Indoor tennis courts, pickleball courts, basketball courts, soccer fields, ice rinks, fitness gyms, and multi-sport complexes.
+
+**Does Next Phase Sports handle online payments?**
+Yes. The platform uses Stripe Connect so facilities can accept bookings, membership fees, and tournament registrations with direct payouts to their account.
+
+**Can members book courts from their phone?**
+Yes. The member portal is fully mobile-optimized. Members can view availability, book courts, pay, and unlock the facility via the Kisi smart lock integration — all from their phone.
+
+**How does the AI scheduling work?**
+The AI scheduling assistant monitors facility utilization in real-time. When a court goes unbooked within a configurable window, it automatically contacts waitlisted members and players with availability offers, fills the slot, and confirms the booking without staff involvement.
+
+**Does it support multi-location facilities?**
+Yes. The platform is built multi-tenant and supports chains with multiple locations under one account, with per-location reporting and consolidated billing.

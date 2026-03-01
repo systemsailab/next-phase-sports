@@ -1,0 +1,39 @@
+# Next Phase Sports
+
+> AI-powered autonomous sports facility management platform — handle bookings, leagues, tournaments, memberships, and scheduling without manual intervention.
+
+## About
+
+Next Phase Sports is a SaaS platform built for sports facility operators (gyms, courts, fields, rinks) that uses AI to autonomously manage the day-to-day operations of a facility. The platform handles court and facility bookings, league and tournament management, membership billing, customer communications, and scheduling — all with minimal staff involvement.
+
+## Key Features
+
+- **Autonomous Scheduling**: AI fills open slots, reschedules conflicts, and optimizes court utilization automatically
+- **Online Booking**: Self-service booking portal for players and teams with real-time availability
+- **League & Tournament Management**: Create brackets, manage standings, schedule games, and handle registrations
+- **Membership Management**: Tiered memberships with Stripe billing, access control, and renewal automation
+- **Smart Notifications**: AI-driven SMS and email reminders, cancellation recovery, and customer communication
+- **Smart Lock Integration**: Kisi-powered access control — members unlock facilities via app without staff
+- **Payment Recovery**: Automated dunning sequences to recover failed payments and reduce churn
+
+## Target Users
+
+- Sports facility owners and operators
+- Gym and fitness center managers
+- Recreational sports leagues and tournament organizers
+- Multi-location sports facility chains
+
+## Key Links
+
+- Website: https://nextphasesports.com
+- Pricing: https://nextphasesports.com/pricing
+- Book a Demo: https://nextphasesports.com/demo
+- For Facilities: https://nextphasesports.com/facilities
+
+## Common Questions This Platform Answers
+
+- How do I manage court bookings for my sports facility?
+- How can I automate league scheduling and tournament brackets?
+- What software do sports facilities use to manage memberships?
+- How do I reduce no-shows and cancellations at my facility?
+- How do I accept online payments for facility rentals and memberships?
