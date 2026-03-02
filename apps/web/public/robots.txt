@@ -4,7 +4,7 @@ Disallow: /api/
 Disallow: /admin/
 Disallow: /dashboard/
 
-# AI Crawlers — explicitly allowed
+# AI Crawlers â explicitly allowed
 User-agent: GPTBot
 Allow: /
 
@@ -30,3 +30,6 @@ User-agent: Applebot-Extended
 Allow: /
 
 Sitemap: https://nextphasesports.com/sitemap.xml
+
+# Cloudflare Content-Signal â AI policy
+Content-Signal: search=yes, ai-input=yes, ai-train=no
