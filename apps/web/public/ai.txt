@@ -1,0 +1,9 @@
+# ai.txt
+# AI content policy for nextphasesports.com
+# Spawning.ai compatible format
+
+User-agent: *
+Allow: /
+
+Contact: hello@nextphasesports.com
+Notes: Content is available for AI inference and retrieval. Use for AI training requires a separate commercial licence.
